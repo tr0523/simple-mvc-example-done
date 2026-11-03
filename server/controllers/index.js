@@ -3,6 +3,7 @@ const models = require('../models');
 
 // get the Cat model
 const { Cat } = models;
+const { Dog } = models;
 
 // Function to handle rendering the index page.
 const hostIndex = async (req, res) => {
@@ -96,8 +97,20 @@ const hostPage2 = (req, res) => {
 };
 
 // Function to render the untemplated page3.
-const hostPage3 = (req, res) => {
+const hostPage3 = async (req, res) => {
   res.render('page3');
+};
+
+// Page4 has a loop that iterates over an array of dogs
+const hostPage4 = async (req, res) => {
+  try {
+    const docs = await Dog.find({}).lean().exec();
+
+    return res.render('page4', { dogs: docs });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ error: 'failed to find dogs' });
+  }
 };
 
 // Get name will return the name of the last added cat.
@@ -276,6 +289,68 @@ const updateLast = (req, res) => {
   });
 };
 
+// Function to create a new dog in the database
+const setDogName = async (req, res) => {
+  
+  if (!req.body.name || !req.body.breed || !req.body.age) {
+    return res.status(400).json({ error: 'name, breed, and age are all required' });
+  }
+ 
+  const dogData = {
+    name: `${req.body.name}`,
+    breed: `${req.body.breed}`,
+    age: req.body.age,
+  };
+
+  const newDog = new Dog(dogData);
+
+  try {
+    await newDog.save();
+    return res.status(201).json({
+      name: newDog.name,
+      age: newDog.age,
+    });
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ error: 'failed to create dog' });
+  }
+};
+
+// Function to handle searching a dog by name and increasing their age by one.
+const dogAgeIncrease = async (req, res) => {
+  
+  if (!req.body.dogName) {
+    return res.status(400).json({ error: 'Name is required to perform a search' });
+  }
+
+  let doc;
+  try {
+    doc = await Dog.findOne({ name: req.body.dogName }).exec();
+  } catch (err) {
+    console.log(err);
+    return res.status(500).json({ error: 'Something went wrong' });
+  }
+
+  if (!doc) {
+    return res.status(404).json({ error: 'No dogs found' });
+  }
+
+  const updatePromise = Dog.findOneAndUpdate({"name" : `${req.body.dogName}`}, {$inc: {'age': 1}}, {
+    returnDocument: 'after',
+    sort: {'createdDate': 'descending'}
+  }).lean().exec();
+
+  updatePromise.then((doc) => res.json({
+    name: doc.name,
+    age: doc.age,
+  }));
+
+  updatePromise.catch((err) => {
+    console.log(err);
+    return res.status(500).json({ error: 'Something went wrong' });
+  });
+};
+
 // A function to send back the 404 page.
 const notFound = (req, res) => {
   res.status(404).render('notFound', {
@@ -289,9 +364,12 @@ module.exports = {
   page1: hostPage1,
   page2: hostPage2,
   page3: hostPage3,
+  page4: hostPage4,
   getName,
   setName,
   updateLast,
   searchName,
+  setDogName,
+  dogAgeIncrease,
   notFound,
 };
